@@ -1,11 +1,6 @@
 #!/bin/bash -e
 
-# github.com/jawj/IKEv2-setup
-# Copyright (c) 2015 – 2020 George MacKerron
-# Released under the MIT licence: http://opensource.org/licenses/mit-license
-
 echo
-echo "=== https://github.com/jawj/IKEv2-setup ==="
 echo
 
 
@@ -95,30 +90,7 @@ TZONE=${TZONE:-'Europe/London'}
 
 read -r -p "Email address for sysadmin (e.g. j.bloggs@example.com): " EMAILADDR
 
-read -r -p "Desired SSH log-in port (default: 22): " SSHPORT
-SSHPORT=${SSHPORT:-22}
 
-read -r -p "New SSH log-in user name: " LOGINUSERNAME
-
-CERTLOGIN="n"
-if [[ -s /root/.ssh/authorized_keys ]]; then
-  while true; do
-    read -r -p "Copy /root/.ssh/authorized_keys to new user and disable SSH password log-in [Y/n]? " CERTLOGIN
-    [[ ${CERTLOGIN,,} =~ ^(y(es)?)?$ ]] && CERTLOGIN=y
-    [[ ${CERTLOGIN,,} =~ ^no?$ ]] && CERTLOGIN=n
-    [[ $CERTLOGIN =~ ^(y|n)$ ]] && break
-  done
-fi
-
-while true; do
-  [[ ${CERTLOGIN} = "y" ]] && read -r -s -p "New SSH user's password (e.g. for sudo): " LOGINPASSWORD
-  [[ ${CERTLOGIN} != "y" ]] && read -r -s -p "New SSH user's log-in password (must be REALLY STRONG): " LOGINPASSWORD
-  echo
-  read -r -s -p "Confirm new SSH user's password: " LOGINPASSWORD2
-  echo
-  [[ "${LOGINPASSWORD}" = "${LOGINPASSWORD2}" ]] && break
-  echo "Passwords didn't match -- please try again"
-done
 
 VPNIPPOOL="10.101.0.0/16"
 
@@ -169,7 +141,6 @@ iptables -I INPUT -i "${ETH0ORSIMILAR}" -m state --state NEW -m recent --set
 iptables -I INPUT -i "${ETH0ORSIMILAR}" -m state --state NEW -m recent --update --seconds 300 --hitcount 60 -j DROP
 
 # accept (non-standard) SSH
-iptables -A INPUT -p tcp --dport "${SSHPORT}" -j ACCEPT
 
 
 # VPN
@@ -295,41 +266,6 @@ echo
 echo "--- User ---"
 echo
 
-# user + SSH
-
-id -u "${LOGINUSERNAME}" &>/dev/null || adduser --disabled-password --gecos "" "${LOGINUSERNAME}"
-echo "${LOGINUSERNAME}:${LOGINPASSWORD}" | chpasswd
-adduser "${LOGINUSERNAME}" sudo
-
-sed -r \
--e "s/^#?Port 22$/Port ${SSHPORT}/" \
--e 's/^#?LoginGraceTime (120|2m)$/LoginGraceTime 30/' \
--e 's/^#?PermitRootLogin yes$/PermitRootLogin no/' \
--e 's/^#?X11Forwarding yes$/X11Forwarding no/' \
--e 's/^#?UsePAM yes$/UsePAM no/' \
--i.original /etc/ssh/sshd_config
-
-grep -Fq 'jawj/IKEv2-setup' /etc/ssh/sshd_config || echo "
-# https://github.com/jawj/IKEv2-setup
-MaxStartups 1
-MaxAuthTries 2
-UseDNS no" >> /etc/ssh/sshd_config
-
-if [[ $CERTLOGIN = "y" ]]; then
-  mkdir -p "/home/${LOGINUSERNAME}/.ssh"
-  chown "${LOGINUSERNAME}" "/home/${LOGINUSERNAME}/.ssh"
-  chmod 700 "/home/${LOGINUSERNAME}/.ssh"
-
-  cp "/root/.ssh/authorized_keys" "/home/${LOGINUSERNAME}/.ssh/authorized_keys"
-  chown "${LOGINUSERNAME}" "/home/${LOGINUSERNAME}/.ssh/authorized_keys"
-  chmod 600 "/home/${LOGINUSERNAME}/.ssh/authorized_keys"
-
-  sed -r \
-  -e "s/^#?PasswordAuthentication yes$/PasswordAuthentication no/" \
-  -i.allows_pwd /etc/ssh/sshd_config
-fi
-
-service ssh restart
 
 
 echo
